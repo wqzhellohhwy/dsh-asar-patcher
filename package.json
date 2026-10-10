@@ -1,10 +1,10 @@
 {
   "name": "dsh-asar-patcher",
   "version": "0.1.0",
-  "description": "DeepSeek Harness app.asar 的定位/读取/等长原地替换与备份还原：零依赖核心库 + DSH 插件工具 + CLI。",
+  "description": "DeepSeek Harness app.asar 的定位/读取/等长原地替换与备份还原：零依赖核心库 + 六个模型面工具 + CLI。改 DSH 本体不再现写脚本，且有护栏（强制等长、默认干运行、自动备份、写后读回复核）。",
   "private": true,
   "type": "module",
-  "main": "lib/index.js",
+  "main": "./lib/index.js",
   "exports": {
     ".": "./lib/index.js",
     "./asar": "./lib/asar.js",
@@ -13,9 +13,43 @@
   "bin": {
     "dsh-asar": "bin/dsh-asar.mjs"
   },
+  "files": [
+    "lib",
+    "bin",
+    "docs",
+    "scripts",
+    "cordis.patch.yml",
+    "README.md",
+    "LICENSE"
+  ],
+  "keywords": [
+    "dsh-plugin",
+    "deepseek-harness",
+    "deepseek",
+    "dsh",
+    "cordis",
+    "asar",
+    "app.asar",
+    "patch",
+    "electron",
+    "asar-patch"
+  ],
+  "license": "MIT",
+  "engines": {
+    "node": ">=20"
+  },
+  "dsh": {
+    "manifestVersion": 1,
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    },
+    "engines": {
+      "dsh": ">=0.2.0-rc.1"
+    }
+  },
   "scripts": {
     "test": "node --test tests/*.test.js",
-    "cli": "node bin/dsh-asar.mjs"
-  },
-  "license": "MIT"
+    "cli": "node bin/dsh-asar.mjs",
+    "check:manifest": "node scripts/check-manifest.mjs"
+  }
 }

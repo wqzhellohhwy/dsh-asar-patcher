@@ -1,0 +1,15 @@
+# dsh-asar-patcher 的组合包(bundle)层。
+#
+# 声明 dsh.bundle.patch 后，本文件成为该包在 profile 组合中的一层 patch：
+# profile 的 dsh.profile.bundles 列出本包时，dsh 会按序应用这里的条目，
+# 插件因此以「标准插件」身份被装配——出现在插件列表、启停入口与
+# 「内置插件」清单里，并带上 package.json 的标题/描述（不再是没有元数据的
+# 「幽灵 entry」，那种状态下设置页会把卡片标成异常且不显示描述）。
+#
+# 本插件只有宿主半侧（六个 asar_* 工具），没有浏览器半侧，所以不声明 dsh.client。
+#
+# id 在整个 profile 组合里必须唯一；config 留空对象，插件自身对未声明字段有兜底。
+- insert:
+    - id: dsh-asar-patcher
+      name: 'dsh-asar-patcher'
+      config: {}
