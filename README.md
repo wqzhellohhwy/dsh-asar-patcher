@@ -99,8 +99,10 @@ lib/tools.js     六个工具定义（模型面）
 lib/index.js     Cordis 插件入口（注册工具）
 bin/dsh-asar.mjs CLI
 tests/asar.test.js  6 例回归：含"只动目标条目、头与其它条目逐字节不变"的边界断言
+scripts/check-manifest.mjs  清单验收（可 --root 对任意插件跑）
 docs/ASAR-PATCHING.md    方法论 + 本次实例（含偏移/长度/校验全过程）
 docs/DSH-STYLE-LEDGER.md DSH 客户端样式账本机制（"整页变裸控件"的根因与两侧修复）
+docs/DSH-PLUGIN-MANIFEST.md 插件卡片「异常」且无描述的成因（幽灵 entry）与最小写法
 ```
 
 ## 历史工具对照
