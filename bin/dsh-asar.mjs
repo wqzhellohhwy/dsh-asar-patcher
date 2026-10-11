@@ -15,13 +15,13 @@
  *
  * 环境变量：DSH_ASAR 指定归档路径（等价于 --asar）。
  */
-import { writeFileSync } from 'node:fs'
 import {
   applySplice,
   backupArchive,
   closeArchive,
   detectAsar,
   findEntries,
+  fs,
   listBackups,
   listEntries,
   openArchive,
@@ -102,7 +102,7 @@ if (command === 'info' || command === 'verify') {
     const buffer = readEntry(fd, dataOffset, hits[0])
     const out = flag('out')
     if (out !== undefined) {
-      writeFileSync(out, buffer)
+      fs.writeFileSync(out, buffer)
       say(`已导出 ${hits[0].path}（${buffer.length} 字节）→ ${out}`)
     } else {
       const offset = Number(flag('offset') ?? 0)

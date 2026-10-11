@@ -133,3 +133,63 @@ sha256(补丁后)  b630ec6a963856f3204551cda81f70d828fb4caabe08f4f4a420d456c7626
 - 目标是 `app.asar.unpacked` 下的原生模块（`.node`）→ 直接改那个目录即可，归档里只是占位；
 - 归档版本升级后补丁会被覆盖 → 把补丁做成**可重复执行的脚本/工具调用**（本库 + 一条 `plan`→`splice`
   的命令序列），升级后重跑；`plan` 在产物已变时会明确报"旧内容找不到"，不会瞎写。
+
+## 六、踩坑实录：Host 跑在 Electron 主进程里，`node:fs` 被 asar 补丁污染（2026-10-11）
+
+### 症状
+
+`node bin/dsh-asar.mjs info` 一切正常，但模型面的 `asar_*` 工具**全部**返回：
+
+```text
+Error: ENOENT,  not found in C:\...\resources\app.asar
+```
+
+注意 `ENOENT,` 后面是**两个空格** —— 文件名是**空串**，不是路径被截断。
+
+### 误判顺序（值得记住）
+
+1. 先怀疑归档损坏 → 直接按 asar 格式手解头：`u32@0=4`、`headerPickle=3392056`、
+   `jsonSize=3392048`，JSON `parse` 成功、12967 个叶子、**无空名条目**；
+   与三个备份的前 16 字节逐字节一致 → **归档无辜**。
+2. 再怀疑工具代码 → 同一个 `lib/asar.js` 在纯 Node 下跑 CLI 完全正常 → **代码无辜**。
+3. 于是问题必然在**运行环境**：查进程命令行，看到 Host 是
+   `"DeepSeek Harness.exe" --expose-internals "…\app.asar\dsh\node_modules\@deepseek-ai\dsh-desktop-host\lib\index.js" …`
+   —— **Electron 主进程**，而 Electron 会包装主进程的 `node:fs`。
+
+### 根因（一句话）
+
+Electron 的 asar 补丁把「路径中出现 `.asar` 段」判定为归档访问，**该段之后的部分**才是归档内路径；
+`…\resources\app.asar` 正好以 `.asar` 收尾、其后为空串 → 补丁拿空串去归档里查 → `notFoundError('')`。
+
+### 判据（一次自查就能区分两种环境）
+
+| 调用 | 纯 Node | Electron 主进程 |
+|---|---|---|
+| `fs.openSync(asar,'r')` | `fd=3` | **`ENOENT,  not found in …app.asar`** |
+| `fs.readFileSync(asar)` | 121348951 字节 | **同款 ENOENT** |
+| `fs.statSync(asar)` | `size=121348951` | **`size=0`, `isDirectory()===true`**（伪造成目录，不报错，最阴） |
+| `fs.existsSync(asar)` | `true` | 不可靠 |
+
+复现命令（无需改任何代码）：
+
+```powershell
+$env:ELECTRON_RUN_AS_NODE="1"; & "…\DeepSeek Harness.exe" scripts/check-electron-fs.mjs
+node scripts/check-electron-fs.mjs      # 对照：纯 Node
+```
+
+### 修复
+
+`lib/asar.js` 顶部建立「归档本体专用 fs 层」：Electron 下取 `original-fs`
+（Electron 提供的**未打补丁** fs），纯 Node 下回退 `node:fs`，并把模块内用到的
+`openSync/readSync/closeSync/statSync/readdirSync/existsSync/copyFileSync/readFileSync/writeSync`
+统统绑到这层上；`lib/tools.js` 与 CLI 的 `writeFileSync` 也改走它。
+
+### 教训
+
+- 「同一个库，CLI 行、工具面上不行」——**先怀疑运行环境，再怀疑代码**：
+  Electron 主进程的 `node:fs` ≠ 纯 Node 的 `node:fs`；凡是**以 `.asar` 结尾的路径**都会进补丁分支。
+- 补丁面工具的报错文本要看**空格**：`ENOENT,  not found in …`（双空格）说明"文件名是空串"，
+  与"文件不存在"是两回事。
+- 新增插件后**必须重启 DSH** 才会加载新代码；重启前用 CLI 应急。
+- 结论要落在"能不能复算"上：本次的定案证据是「同一份 `lib/asar.js`，纯 Node `PASS`、
+  Electron `PASS（且 node:fs 那行明确报被拦截）`」这两条并排输出。

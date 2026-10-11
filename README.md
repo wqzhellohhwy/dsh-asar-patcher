@@ -10,6 +10,37 @@ node bin/dsh-asar.mjs info       # 定位归档 + 结构自检 + 备份列表
 
 ---
 
+## Electron 下的 asar fs 补丁（必读，2026-10-11 踩过）
+
+DSH 桌面版的 **Host 就跑在 Electron 主进程里**（进程命令行可见
+`"DeepSeek Harness.exe" --expose-internals "…\resources\app.asar\dsh\node_modules\@deepseek-ai\dsh-desktop-host\lib\index.js" …`），
+而 Electron 给主进程的 `node:fs` 打了 **asar 补丁**：路径里一旦出现以 `.asar` 结尾的段，
+该段之后的部分就被当成「归档内路径」。`…\resources\app.asar` 恰好以 `.asar` 收尾、其后是**空串**，于是：
+
+| 调用 | 纯 Node（CLI） | Electron 主进程（插件工具） |
+|---|---|---|
+| `fs.openSync(asar)` / `fs.readFileSync(asar)` | 正常 | **抛 `ENOENT,  not found in …\app.asar`**（`ENOENT,` 后是两个空格 —— 文件名为空串） |
+| `fs.statSync(asar)` | size=121348951 | 不报错，但伪造成 **size=0 的目录** |
+| `fs.existsSync(asar)` | true | 不可靠 |
+
+**症状**：`node bin/dsh-asar.mjs info` 一切正常，而模型面的 `asar_*` 工具**全部**报
+`ENOENT,  not found in …\app.asar`（归档本身完好，12967 个条目照旧解析得出来）。
+
+**修复**：`lib/asar.js` 用一个 fs 层包住归档本体 —— Electron 下取 `original-fs`
+（Electron 提供的**未打补丁** fs，`createRequire(import.meta.url)('original-fs')`），
+纯 Node 下没有该模块则回退 `node:fs`。普通文件（备份、导出目标、`--old/--new` 文件）两边都能读写。
+
+**自查**（两行输出即可看出差别，Electron 那行会报「被拦截：是」而结论仍是 `PASS`）：
+
+```powershell
+node scripts/check-electron-fs.mjs
+$env:ELECTRON_RUN_AS_NODE="1"; & "…\DeepSeek Harness.exe" scripts/check-electron-fs.mjs
+```
+
+> 改完插件**必须重启 DSH** 才生效（Host 已把旧模块读进内存）；重启前可用 CLI 应急。
+
+---
+
 ## 为什么需要它
 
 DSH 桌面版把整个 Host 实现打包在 `resources/app.asar` 里，其中
@@ -100,6 +131,7 @@ lib/index.js     Cordis 插件入口（注册工具）
 bin/dsh-asar.mjs CLI
 tests/asar.test.js  6 例回归：含"只动目标条目、头与其它条目逐字节不变"的边界断言
 scripts/check-manifest.mjs  清单验收（可 --root 对任意插件跑）
+scripts/check-electron-fs.mjs  Electron asar 补丁自查（纯 Node / RUN_AS_NODE 各跑一遍对比）
 docs/ASAR-PATCHING.md    方法论 + 本次实例（含偏移/长度/校验全过程）
 docs/DSH-STYLE-LEDGER.md DSH 客户端样式账本机制（"整页变裸控件"的根因与两侧修复）
 docs/DSH-PLUGIN-MANIFEST.md 插件卡片「异常」且无描述的成因（幽灵 entry）与最小写法
