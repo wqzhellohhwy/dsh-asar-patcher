@@ -1,0 +1,9 @@
+	// [dsh-local-patch] no read-before-edit: an unseen or confirmed-absent target
+	// carries no guard instead of throwing FS_NOT_OBSERVED / FS_NOT_FOUND; an
+	// observed present target still supplies its version as the CAS basis.
+	editIntent(target, actor) {
+		const owner = this.owner(actor);
+		const prior = owner ? this.get(owner, target.targetKey) : void 0;
+		return prior?.kind === "present" ? { version: prior.version } : void 0;
+	}
+	// pad: ------------------------------------------------------------------------------------------------------------------------------------------------------------------

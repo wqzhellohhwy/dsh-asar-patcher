@@ -193,3 +193,72 @@ node scripts/check-electron-fs.mjs      # 对照：纯 Node
 - 新增插件后**必须重启 DSH** 才会加载新代码；重启前用 CLI 应急。
 - 结论要落在"能不能复算"上：本次的定案证据是「同一份 `lib/asar.js`，纯 Node `PASS`、
   Electron `PASS（且 node:fs 那行明确报被拦截）`」这两条并排输出。
+
+## 七、实例：解除「编辑前必须先读」（2026-10-11，0.2.0-rc.2）
+
+补丁片段、复现脚本与三层验证见 [`patches/noread-edit/`](../patches/noread-edit/README.md)。
+
+### 症状与根因
+
+模型改一行也要先 `read` 整个文件，否则：
+
+```text
+cannot modify "<path>": file has not been read — read the file, then retry
+```
+
+拦人的不是工具，是策略插件 `@deepseek-ai/dsh-fs-observation-policy` 的 `fs/*` 事件门禁：
+`editIntent` 在"本会话没观察过该路径"时直接抛 `FS_NOT_OBSERVED`；`writeIntent` 把"未观察"解析成
+`{ kind: "createIfAbsent" }`，于是 `write` 覆盖已存在文件也会被 provider 顶回来。
+
+关键在于 `fs/*-intent` 是**单槽瀑布事件**，工具侧的调用是
+`ctx.waterfall("fs/edit-intent", target, exec, () => void 0)` —— **监听器返回 `undefined` 是合法结果**，
+此时 provider 用自己刚 `stat` 到的新鲜版本或走无守卫路径（`dsh-fs-local` 里
+`if (expected?.kind === …)` / `if (expected && …)` 都不成立）。所以"未观察"的正解是**不提供守卫**，
+而不是抛错。
+
+### 补丁（4 处，全部等长）
+
+| 条目 | 文件内偏移 | 长度 | 改动 |
+|---|---|---|---|
+| `dsh-fs-observation-policy/lib/index.js` | 1838 | 418 → 418 | `writeIntent`：未见/确认缺失 ⇒ `void 0`（不再 `createIfAbsent`） |
+| 同上 | 2257 | 610 → 610 | `editIntent`：删掉两条 `throw`，未见/缺失 ⇒ `void 0`；已观察 present 仍返回 `{ version }` |
+| `dsh-tool-fs/lib/index.js` | 21231 | 272 → 272 | `write` 的系统提示改为"无需先读" |
+| 同上 | 26248 | 204 → 204 | `edit` 的系统提示同上 |
+
+```text
+归档            bytes 121348951 → 121348951（头与 JSON 索引逐字节未动）
+dataOffset      3392064 → 3392064
+sha256(改前)    ccc131125b99d2472a1a648c5f83ee5f6eee1c144f62625cf080d0ef5521666c
+sha256(改后)    0121ba169d0534add83035c7df5a3a717c05d1e1de6112c9af951745d54ff8d2
+备份            app.asar.20261011-noread-patch
+```
+
+凑等长用的是第二节的手法 3+4：把 `writeIntent` / `editIntent` 上方的 JSDoc 一起纳入替换区，
+重写成更短的 `// [dsh-local-patch] …` 注释，剩余差额用 `// pad: ----` 注释行补齐（注释内空白无语义）。
+
+### 验证（三层，全部 PASS）
+
+1. `tools/verify_asar.py` —— 归档字节数与 `dataOffset` 不变、**JSON 索引逐字节相同**、
+   全文件差异区间仅落在两个目标条目内、条目读回 ==「备份条目 + 片段」逐字节一致；
+2. `tests/test.mjs`（19 项）—— 真源码 + 新旧对照；并用 `new Function` **逐字执行** `dsh-fs-local`
+   的守卫源码，证明 `expected === undefined` 时 write/edit 都放行，而 `createIfAbsent` 仍拦覆盖、
+   陈旧版本仍抛 `FS_STALE_VERSION`；
+3. `tools/e2e.mjs`（10 项）—— **用 Electron 的 node 模式直接 import asar 内的真实模块**
+   （`Context` + `LocalFileSystem` + 补丁后的策略），对 DSH 从未观察过的真实文件真的改成功；
+   换用备份里的原版策略则真的被 `FS_NOT_OBSERVED` 拦住。
+
+> 顺带一个好用的技巧：`ELECTRON_RUN_AS_NODE=1 "...\DeepSeek Harness.exe" script.mjs`
+> 能**直接 import asar 内的 ESM 模块**（连裸标识符依赖解析都可用），因此不必解包归档，
+> 也能对归档里的真实代码做端到端测试。
+
+### 生效与回退
+
+改完**必须重启 DSH**（运行中的进程已把旧代码读进内存；重启前实测仍报 `file has not been read`）。
+回退：`node bin/dsh-asar.mjs restore 20261011-noread-patch`。
+升级覆盖后重打：`node patches/noread-edit/tools/apply.mjs [--write]` —— 内容定位，偏移变了也能打；
+产物已变时 `plan` 会明确报"旧内容找不到"，不会瞎写。
+
+### 风险提示（这是**放宽**，不是修复）
+
+补丁后"没读过的文件也能被整文件覆盖"，这正是需求本身；剩下的安全网只有
+"**读过之后**文件被外部改动 ⇒ `FS_STALE_VERSION`"。想恢复严格模式，用备份还原归档即可。

@@ -1,0 +1,12 @@
+	/**
+	* Decide the edit version guard: unseen rejects with `FS_NOT_OBSERVED`,
+	* confirmed absence rejects with `FS_NOT_FOUND`, and presence supplies the
+	* observed version as the CAS basis.
+	*/
+	editIntent(target, actor) {
+		const owner = this.owner(actor);
+		const prior = owner ? this.get(owner, target.targetKey) : void 0;
+		if (!owner || prior === void 0) throw new FsError(`edit requires reading "${target.displayPath}" first`, "FS_NOT_OBSERVED");
+		if (prior.kind === "absent") throw new FsError(`cannot edit "${target.displayPath}": not found`, "FS_NOT_FOUND");
+		return { version: prior.version };
+	}

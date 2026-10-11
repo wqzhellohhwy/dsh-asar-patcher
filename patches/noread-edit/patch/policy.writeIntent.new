@@ -1,0 +1,11 @@
+	// [dsh-local-patch] unobserved/absent target: no guard (provider default
+	// create-or-overwrite); observed present keeps its CAS version.
+	writeIntent(target, actor) {
+		const owner = this.owner(actor);
+		const prior = owner ? this.get(owner, target.targetKey) : void 0;
+		return prior?.kind === "present" ? {
+			kind: "replaceIfVersion",
+			version: prior.version
+		} : void 0;
+	}
+	// pad: -----------------------

@@ -135,6 +135,7 @@ scripts/check-electron-fs.mjs  Electron asar 补丁自查（纯 Node / RUN_AS_NO
 docs/ASAR-PATCHING.md    方法论 + 本次实例（含偏移/长度/校验全过程）
 docs/DSH-STYLE-LEDGER.md DSH 客户端样式账本机制（"整页变裸控件"的根因与两侧修复）
 docs/DSH-PLUGIN-MANIFEST.md 插件卡片「异常」且无描述的成因（幽灵 entry）与最小写法
+patches/noread-edit/     「编辑前必须先读」解除补丁：4 组等长片段 + 复现/验证脚本（见 docs/ASAR-PATCHING.md 第七节）
 ```
 
 ## 历史工具对照

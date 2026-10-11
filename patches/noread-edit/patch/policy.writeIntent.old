@@ -1,0 +1,12 @@
+	/**
+	* Decide the write intent: unseen or confirmed absent ⇒ `createIfAbsent`;
+	* confirmed present ⇒ `replaceIfVersion` at the observed version.
+	*/
+	writeIntent(target, actor) {
+		const owner = this.owner(actor);
+		const prior = owner ? this.get(owner, target.targetKey) : void 0;
+		return prior?.kind === "present" ? {
+			kind: "replaceIfVersion",
+			version: prior.version
+		} : { kind: "createIfAbsent" };
+	}

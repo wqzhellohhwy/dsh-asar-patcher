@@ -1,0 +1,1 @@
+		text: ({ scope }) => /* dsh-local-patch: relaxed fs policy */ ctx.tools.get("write", scope) === void 0 ? "" : "No prior read is required: write replaces the whole file atomically." + (ctx.tools.get("edit", scope) === void 0 ? "" : " Prefer edit for targeted changes.")  

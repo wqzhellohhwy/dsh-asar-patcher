@@ -1,0 +1,1 @@
+		text: ({ scope }) => ctx.tools.get("write", scope) === void 0 ? "" : "Read an existing file before overwriting it with write (the default fs-observation-policy requires it)" + (ctx.tools.get("edit", scope) === void 0 ? "" : " and prefer edit for targeted changes") + "."

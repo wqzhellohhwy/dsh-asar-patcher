@@ -1,0 +1,1 @@
+		text: ({ scope }) => /* dsh-local-patch: relaxed fs policy */ ctx.tools.get("edit", scope) === void 0 ? "" : "No prior read needed: edit replaces literal text and reports missing or ambiguous matches." 

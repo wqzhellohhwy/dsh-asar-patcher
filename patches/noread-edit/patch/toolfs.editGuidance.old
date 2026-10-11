@@ -1,0 +1,1 @@
+		text: ({ scope }) => ctx.tools.get("edit", scope) === void 0 ? "" : "Read a file before editing it (the default fs-observation-policy requires it), unless you just created or edited it in this session."
